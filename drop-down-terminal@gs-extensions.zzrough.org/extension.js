@@ -183,6 +183,7 @@ const DropDownTerminalExtension = new Lang.Class({
         this._busProxy = null;
         this._windowActor = null;
         this._firstDisplay = true;
+        this._isFullScreen = false;
 
         // initializes if we should toggle on bus name appearance 
         this._toggleOnBusNameAppearance = false;
@@ -370,29 +371,49 @@ const DropDownTerminalExtension = new Lang.Class({
 
             // if the actor is set, this means the terminal is opened, so we will handle closing
             if (this._windowActor !== null) {
-                let targetY = this._hasMonitorAbove() ? this._windowActor.y : -this._windowActor.height;
-                let targetScaleY = this._hasMonitorAbove() ? 0.0 : 1.0;
-                let animationTime = this._shouldAnimateWindow() ? this._closingAnimationTimeMillis / 1000.0 : 0;
 
-                Tweener.addTween(this._windowActor, {
-                    y: targetY,
-                    scale_y: targetScaleY,
-                    time: animationTime,
-                    transition: "easeInExpo",
-                    onComplete: Lang.bind(this, function() {
-                                    // unregisters the ctrl-alt-tab group
-                                    Main.ctrlAltTabManager.removeGroup(this._windowActor);
-
-                                    // clears the window actor ref since we use it to know the window visibility
-                                    this._windowActor = null;
-
-                                    // requests toggling asynchronously
-                                    this._busProxy.ToggleRemote();
-                                })
-                });
+                if (this._isFullScreen) {
+                    this._isFullScreen = false;
+                    let targetY = this._hasMonitorAbove() ? this._windowActor.y : -this._windowActor.height;
+                    let targetScaleY = this._hasMonitorAbove() ? 0.0 : 1.0;
+                    let animationTime = this._shouldAnimateWindow() ? this._closingAnimationTimeMillis / 1000.0 : 0;
+    
+                    Tweener.addTween(this._windowActor, {
+                        y: targetY,
+                        scale_y: targetScaleY,
+                        time: animationTime,
+                        transition: "easeInExpo",
+                        onComplete: Lang.bind(this, function() {
+                                        // unregisters the ctrl-alt-tab group
+                                        Main.ctrlAltTabManager.removeGroup(this._windowActor);
+    
+                                        // clears the window actor ref since we use it to know the window visibility
+                                        this._windowActor = null;
+    
+                                        // requests toggling asynchronously
+                                        this._busProxy.ToggleRemote();
+                                    })
+                    });
+    
+                } else {
+                    this._setFullScreen(true);
+                }
             } else {
+                this._setFullScreen(false);
                 this._busProxy.ToggleRemote();
             }
+        }
+    },
+
+    _setFullScreen: function(setFullScreen) {
+        debug("asked to set fullscreen to " + setFullScreen);
+        if (setFullScreen) {
+            this._isFullScreen = true;
+            this._windowActor.clear_effects();
+            this._updateWindowGeometry();
+        } else {
+            this._isFullScreen = false;
+            this._updateWindowGeometry();
         }
     },
 
@@ -411,6 +432,9 @@ const DropDownTerminalExtension = new Lang.Class({
 
         // computes and keep the window height for use when the terminal will be spawn (if it is not already)
         let heightSpec = this._settings.get_string(TERMINAL_HEIGHT_SETTING_KEY);
+        if (this._isFullScreen) {
+          heightSpec = "100%";
+        }
         this._windowHeight = this._computeWindowHeight(heightSpec);
 
         // applies the change dynamically if the terminal is already spawn
@@ -424,6 +448,7 @@ const DropDownTerminalExtension = new Lang.Class({
 
         return false;
     },
+
 
     _bindShortcut: function() {
         if (Main.wm.addKeybinding && Shell.KeyBindingMode) // introduced in 3.7.5
